@@ -1,0 +1,68 @@
+Orditor AIX — Vercel Deployment
+==================================
+
+This is the same audit tool (four engines: contract, API, agent-containment,
+AI<->blockchain boundary), restructured to deploy on Vercel as a Python
+serverless app. Tested locally end-to-end before packaging — same results,
+same docx report, zero Node dependency (report generation now uses
+python-docx instead of the JS docx library, since a serverless function
+can't reliably shell out to Node).
+
+WHAT CHANGED FROM THE LOCAL VERSION
+------------------------------------
+- report_generator.py replaces generate_aix_report.js — pure Python,
+  same report structure (cover, exec summary, attack chain, methodology,
+  findings index, detailed findings, remediation, disclaimer).
+- The docx download is embedded as a base64 data: URI directly in the
+  results page HTML, generated in the same request as the audit — Vercel
+  functions are stateless between invocations, so a separate download
+  endpoint relying on a file left on disk or an in-memory dict from a
+  prior request wouldn't reliably work.
+- Each uploaded file is capped at 300KB to stay well inside Vercel's
+  function execution budget.
+
+HOW TO DEPLOY
+--------------
+Option A — Vercel CLI (fastest):
+  1. npm install -g vercel        (if you don't have it)
+  2. cd into this folder
+  3. vercel                       (follow the prompts, first deploy)
+  4. vercel --prod                (promote to production URL)
+
+Option B — GitHub + Vercel dashboard:
+  1. Push this folder to a new GitHub repo
+  2. Go to vercel.com -> Add New Project -> import that repo
+  3. Vercel auto-detects Flask from app.py (requirements.txt present) —
+     no build configuration needed
+  4. Deploy
+
+WHAT'S IN THIS FOLDER
+-----------------------
+  app.py               <- entrypoint Vercel loads (must expose `app`)
+  report_generator.py  <- pure-Python docx generation
+  requirements.txt     <- flask, python-docx
+  engines/              <- the four analysis engines (unchanged logic)
+    contract_engine.py
+    api_engine.py
+    agent_engine.py
+    boundary_engine.py
+
+LIMITS TO KNOW ABOUT
+----------------------
+- Vercel's Python functions are stateless/ephemeral with an execution time
+  limit (short on the free Hobby tier). For a handful of files this audit
+  runs in well under a second locally, so this should be comfortable — but
+  a very large multi-file audit could get closer to the limit.
+- No persistent storage between requests — this app doesn't need any
+  (everything happens within one request), but if you later want to save
+  audit history, that needs an external store (Vercel Postgres/KV, etc.),
+  not local disk.
+- This dev/test pass used Flask's built-in server locally; Vercel runs your
+  Flask app through its own Python runtime automatically — no code change
+  needed for that part.
+
+RUNNING IT LOCALLY FIRST (recommended before deploying)
+-----------------------------------------------------------
+  pip install -r requirements.txt --break-system-packages
+  python3 app.py
+  open http://localhost:5000
